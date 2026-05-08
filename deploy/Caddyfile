@@ -1,0 +1,40 @@
+# /etc/caddy/Caddyfile
+#
+# Terminates TLS for paperclip.profithawk.io and proxies to the
+# Paperclip container on 127.0.0.1:3100.
+# Caddy auto-issues + renews Let's Encrypt certs.
+
+paperclip.profithawk.io {
+    # Reverse proxy to the container
+    reverse_proxy 127.0.0.1:3100 {
+        # WebSockets need these for the live agent dashboard
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # Sensible security headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        # Caddy adds the rest by default
+    }
+
+    # Bigger uploads for agent file attachments
+    request_body {
+        max_size 50MB
+    }
+
+    encode gzip zstd
+
+    log {
+        output file /var/log/caddy/paperclip.log {
+            roll_size 50mb
+            roll_keep 5
+        }
+        format json
+    }
+}

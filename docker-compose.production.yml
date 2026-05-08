@@ -1,0 +1,42 @@
+# docker-compose.production.yml
+# Lives at /opt/paperclip/docker-compose.production.yml on the VPS.
+# Pulls our pre-built image from GHCR. Postgres is external (Render).
+
+services:
+  paperclip:
+    image: ghcr.io/profit-hawk/paperclip:${IMAGE_TAG:-latest}
+    container_name: paperclip
+    restart: unless-stopped
+
+    # Bind to localhost only. Caddy on the host reverse-proxies to it.
+    ports:
+      - "127.0.0.1:3100:3100"
+
+    environment:
+      # Network
+      HOST: "0.0.0.0"
+      PORT: "3100"
+
+      # Run UI + API in one container
+      SERVE_UI: "true"
+
+      # Auth + public-facing URL
+      PAPERCLIP_DEPLOYMENT_MODE: "authenticated"
+      PAPERCLIP_DEPLOYMENT_EXPOSURE: "public"
+      PAPERCLIP_PUBLIC_URL: "https://paperclip.profithawk.io"
+      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET must be set}"
+
+      # External Postgres (Render)
+      DATABASE_URL: "${DATABASE_URL:?DATABASE_URL must be set}"
+
+    volumes:
+      - paperclip-data:/paperclip
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+volumes:
+  paperclip-data:

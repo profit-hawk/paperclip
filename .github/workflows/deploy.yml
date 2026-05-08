@@ -1,0 +1,53 @@
+name: Deploy to VPS
+
+on:
+  # Trigger on push to production branch (infra changes)
+  push:
+    branches: [production]
+    paths:
+      - "docker-compose.production.yml"
+      - "deploy/**"
+      - ".github/workflows/deploy.yml"
+
+  # Manual trigger from the Actions tab. Use this to redeploy after
+  # a master push has built a new image.
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (default: latest)"
+        required: false
+        default: "latest"
+
+  # Trigger automatically when the upstream Docker workflow finishes
+  # successfully on master, so a new image build deploys itself.
+  workflow_run:
+    workflows: ["Docker"]
+    types: [completed]
+    branches: [master]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Don't deploy if the upstream Docker workflow failed
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/paperclip
+            echo "==> Pulling latest image..."
+            docker compose -f docker-compose.production.yml pull
+            echo "==> Restarting service..."
+            docker compose -f docker-compose.production.yml up -d --remove-orphans
+            echo "==> Pruning old images..."
+            docker image prune -f
+            echo "==> Container status:"
+            docker ps --filter "name=paperclip"
+            echo "==> Recent logs:"
+            docker logs paperclip --tail 30 2>&1 || true
