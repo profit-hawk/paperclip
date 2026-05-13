@@ -10,13 +10,9 @@ on:
       - ".github/workflows/deploy.yml"
 
   # Manual trigger from the Actions tab. Use this to redeploy after
-  # a master push has built a new image.
+  # a master push has built a new image. Tag selection happens via
+  # IMAGE_TAG in /opt/paperclip/.env on the VPS (see NOTES.md).
   workflow_dispatch:
-    inputs:
-      image_tag:
-        description: "Image tag to deploy (default: latest)"
-        required: false
-        default: "latest"
 
   # Trigger automatically when the upstream Docker workflow finishes
   # successfully on master, so a new image build deploys itself.
@@ -25,9 +21,14 @@ on:
     types: [completed]
     branches: [master]
 
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # Don't deploy if the upstream Docker workflow failed
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
 
