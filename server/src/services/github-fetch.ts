@@ -16,11 +16,33 @@ export function resolveRawGitHubUrl(hostname: string, owner: string, repo: strin
     : `https://${hostname}/raw/${owner}/${repo}/${ref}/${p}`;
 }
 
+const GITHUB_DOT_COM_TOKEN_HOSTS = new Set(["api.github.com", "raw.githubusercontent.com"]);
+
+function isAuthorizedGitHubHost(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  if (GITHUB_DOT_COM_TOKEN_HOSTS.has(h)) return true;
+  const enterpriseList = process.env.GITHUB_ENTERPRISE_HOSTS;
+  if (!enterpriseList) return false;
+  return enterpriseList
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter((s) => s.length > 0)
+    .includes(h);
+}
+
 export async function ghFetch(url: string, init?: RequestInit): Promise<Response> {
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
   const headers = new Headers(init?.headers);
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
+  if (token && !headers.has("Authorization")) {
+    let hostname: string | null = null;
+    try {
+      hostname = new URL(url).hostname;
+    } catch {
+      // Invalid URL — fall through and let fetch surface the error below.
+    }
+    if (hostname && isAuthorizedGitHubHost(hostname)) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
   }
   try {
     return await fetch(url, { ...init, headers });

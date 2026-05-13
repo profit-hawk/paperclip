@@ -10,6 +10,7 @@ describe("ghFetch", () => {
   beforeEach(() => {
     vi.stubEnv("GITHUB_TOKEN", "");
     vi.stubEnv("GH_TOKEN", "");
+    vi.stubEnv("GITHUB_ENTERPRISE_HOSTS", "");
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(new Response("{}", { status: 200 })),
@@ -73,5 +74,46 @@ describe("ghFetch", () => {
     expect(headers.get("Authorization")).toBe("Bearer ghp_primary");
     expect(headers.get("Accept")).toBe("application/vnd.github+json");
     expect(headers.get("X-Custom-Header")).toBe("custom-value");
+  });
+
+  it("does not send the env token to non-GitHub hosts", async () => {
+    vi.stubEnv("GITHUB_TOKEN", "ghp_primary");
+
+    await ghFetch("https://attacker.example/owner/repo");
+
+    const headers = getRequestHeaders(vi.mocked(fetch).mock.calls[0]);
+    expect(headers.has("Authorization")).toBe(false);
+  });
+
+  it("attaches the token when fetching from raw.githubusercontent.com", async () => {
+    vi.stubEnv("GITHUB_TOKEN", "ghp_primary");
+
+    await ghFetch("https://raw.githubusercontent.com/o/r/main/README.md");
+
+    const headers = getRequestHeaders(vi.mocked(fetch).mock.calls[0]);
+    expect(headers.get("Authorization")).toBe("Bearer ghp_primary");
+  });
+
+  it("attaches the token for hosts listed in GITHUB_ENTERPRISE_HOSTS", async () => {
+    vi.stubEnv("GITHUB_TOKEN", "ghp_primary");
+    vi.stubEnv("GITHUB_ENTERPRISE_HOSTS", "github.acme.com, ghe.internal");
+
+    await ghFetch("https://ghe.internal/api/v3/repos/o/r");
+
+    const headers = getRequestHeaders(vi.mocked(fetch).mock.calls[0]);
+    expect(headers.get("Authorization")).toBe("Bearer ghp_primary");
+  });
+
+  it("does not clobber a caller-provided Authorization header", async () => {
+    vi.stubEnv("GITHUB_TOKEN", "ghp_server");
+
+    await ghFetch("https://api.github.com/repos/o/r", {
+      headers: {
+        Authorization: "Bearer caller_supplied_token",
+      },
+    });
+
+    const headers = getRequestHeaders(vi.mocked(fetch).mock.calls[0]);
+    expect(headers.get("Authorization")).toBe("Bearer caller_supplied_token");
   });
 });
