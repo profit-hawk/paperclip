@@ -107,6 +107,11 @@ git merge --no-ff "$LATEST"                # then open a PR into master
 Notes:
 - DB migrations (`packages/db/src/migrations/`) are **additive** and run
   automatically on startup — no manual migration step.
+- **Label the sync PR `upstream-sync`.** A sync PR must carry upstream's
+  `pnpm-lock.yaml` verbatim, but the `policy` job in `pr.yml` blocks lockfile
+  edits on ordinary PRs; the `upstream-sync` label skips just that one check
+  (the rest of `policy` and all tests still run). Without the label, `policy`
+  fails and gates the entire CI run.
 - Merges have been **conflict-free** historically because our patches (§5) sit
   in files upstream doesn't touch. If `pnpm install` adds an empty
   `packages/<x>: {}` importer to `pnpm-lock.yaml`, that's incidental churn —
