@@ -5,6 +5,15 @@ For general engineering rules (dev setup, DB workflow, PR checklist, UI/API
 conventions) see `AGENTS.md` — that file is **upstream's** generic guide and
 applies here too. **This file owns everything fork- and deploy-specific.**
 
+> 🚫 **HARD RULE — the upstream relationship is STRICTLY ONE-WAY.**
+> We pull releases *from* [`paperclipai/paperclip`](https://github.com/paperclipai/paperclip);
+> we **never push, force-push, open PRs against, or otherwise send anything back
+> to it.** `paperclipai` is a **read-only mirror source**. Every push goes to
+> `origin` (`profit-hawk/paperclip`) and nowhere else. Treat any
+> `git push upstream …` (or a PR targeting `paperclipai/...`) as a mistake to
+> abort. When you add the `upstream` remote, immediately disable its push URL —
+> see §4.
+
 > ⚠️ `AGENTS.md` §11 ("Fork-Specific: HenkDz/paperclip") is inherited from
 > upstream and describes an *unrelated* contributor's fork (Hermes
 > externalization, port 3101). It is **not** about us — ignore it and trust
@@ -56,6 +65,20 @@ Required secrets: `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`.
 `latest` is the default-branch (`master`) tag, so the VPS's default `IMAGE_TAG=latest`
 tracks `master`.
 
+> **Where deployed code comes from: `master`, NOT `production`.** The image is
+> built from `master` and tagged `latest`; `docker-compose.production.yml` only
+> *pulls* that image. Consequences:
+> - **App/code customizations must land on `master`** (you may then merge `master`
+>   into `production`). Code committed *only* to `production` is **never built into
+>   an image and never runs** — `production` currently differs from `master` by
+>   deploy-config files only.
+> - `production` carries deploy **config only** (compose, Caddy, env) and exists to
+>   (a) version that config and (b) trigger a redeploy when it changes.
+> - Because `deploy.yml` also fires when the **Docker** build finishes on `master`,
+>   **every push to `master` auto-deploys to the VPS** (it pulls `latest`). To make
+>   prod updates deliberate, pin `IMAGE_TAG` to an immutable `sha-…`/version tag in
+>   `/opt/paperclip/.env` and bump it to promote.
+
 ## 4. Updating to the latest upstream paperclip (fork sync)
 
 Upstream versions are **CalVer** `vYYYY.MDD.PATCH` (e.g. `v2026.529.0`). The
@@ -66,8 +89,11 @@ Find the latest released version, then merge its **tag** (prefer the released
 tag over `upstream/master`, which carries unreleased work):
 
 ```bash
-# one-time
+# one-time: add upstream as a FETCH-ONLY mirror, then disable pushing to it.
+# (Sync is one-way — see the hard rule at the top. Pull from upstream; push only to origin.)
 git remote add upstream https://github.com/paperclipai/paperclip.git
+git remote set-url --push upstream DISABLED   # `git push upstream …` now fails safely
+git remote -v                                 # confirm: upstream …(fetch) / DISABLED (push)
 
 # latest released version number:
 npm view paperclipai version            # e.g. 2026.529.0
